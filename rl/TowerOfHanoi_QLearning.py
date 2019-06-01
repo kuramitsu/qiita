@@ -7,86 +7,75 @@ https://qiita.com/akih1992/items/cdb39e5a23dff9b13498
 import numpy as np
 from collections import defaultdict
 
-global MAX_DISK_SIZE
-MAX_DISK_SIZE = 1000
-
-class Pole(list):
-    @property
-    def top_disk(self):
-        if not bool(self):
-            return MAX_DISK_SIZE
-        else:
-            return self[-1]
-
-    def __eq__(self, other):
-        return bool(self.top_disk == other.top_disk)
-    
-    def __gt__(self, other):
-        return bool(self.top_disk > other.top_disk)
-
-    def __lt__(self, other):
-        return bool(self.top_disk < other.top_disk)
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-    
-    def __le__(self, other):
-        return not self.__gt__(other)
-    
-    def __ge__(self, other):
-        return not self.__lt__(other)
-
 
 class TowerOfHanoiEnvironment(object):
-    def __init__(self, n_disks, max_episode_steps=200):
+    def __init__(self, n_disks, max_episode_steps=200, n_poles=3):
+        assert(n_poles >= 3)
         self.n_disks = n_disks
-        self.n_actions = 3
+        self.n_poles = n_poles
+        self.n_actions = int(n_poles * (n_poles - 1) / 2)   # n_poles C 2
         self.max_episode_steps = max_episode_steps
-
+        state = np.zeros(n_poles * n_disks, dtype=np.bool)
+        state[:n_disks].fill(True)
+        self.state = state
+        self.curr_step = 0
+        # 以下は算出できそうな気もする
+        action_map = []
+        for p1 in range(n_poles):
+            for p2 in range(p1 + 1, n_poles):
+                action_map.append((p1, p2))
+        self.action_map = action_map
+        assert(len(self.action_map) == self.n_actions)
+ 
     def reset(self):
-        self.pole = [Pole() for i in range(3)]
-        for d in reversed(range(self.n_disks)):
-            self.pole[0].append(d)
+        self.state.fill(False)
+        self.state[:self.n_disks].fill(True)
         self.curr_step = 0
         return self.state
     
+    def _pole_state(self, pole_id):
+        _s = pole_id * self.n_disks
+        return self.state[_s:_s + self.n_disks]
+
     def step(self, action):
         self.curr_step += 1
-        if action == 0:
-            self.move_disk(0, 1)
-        elif action == 1:
-            self.move_disk(1, 2)
-        elif action == 2:
-            self.move_disk(2, 0)
+        self.move_disk(*self.action_map[action])
 
         is_terminal = False
         reward = -1
         
-        if (len(self.pole[1]) == self.n_disks) or (len(self.pole[2]) == self.n_disks):
-            is_terminal = True
-            reward = 1
-        elif self.curr_step == self.max_episode_steps:
+        if not np.any(self._pole_state(0)):
+            for pole_id in range(1, self.n_poles):
+                if np.all(self._pole_state(pole_id)):
+                    is_terminal = True
+                    reward = 1
+
+        if self.curr_step >= self.max_episode_steps:
             is_terminal = True
         
         return self.state, reward, is_terminal
 
-    @property
-    def state(self):
-        state = []
-        for i in range(3):
-            state += [bool(j in self.pole[i]) for j in range(self.n_disks)]
-        return np.array(state, dtype=np.float32)
+    def _pole_top_disk(self, pole_id):
+        state = self._pole_state(pole_id)
+        for disk_id in range(self.n_disks):
+            if state[disk_id]:
+                return disk_id
+        return self.n_disks    # sentinel
 
-    def move_disk(self, a, b):
-        if self.pole[a] > self.pole[b]:
-            self.pole[a].append(self.pole[b].pop())
-        elif self.pole[a] < self.pole[b]:
-            self.pole[b].append(self.pole[a].pop())
-         
+    def move_disk(self, pole_1, pole_2):
+        top_1 = self._pole_top_disk(pole_1)
+        top_2 = self._pole_top_disk(pole_2)
+        if top_1 > top_2:
+            self._pole_state(pole_1)[top_2] = True
+            self._pole_state(pole_2)[top_2] = False
+        elif top_1 < top_2:
+            self._pole_state(pole_1)[top_1] = False
+            self._pole_state(pole_2)[top_1] = True
+
     def render(self):
-        print('pole0:{}'.format(self.pole[0]))
-        print('pole1:{}'.format(self.pole[1]))
-        print('pole2:{}'.format(self.pole[2]))
+        for pole_id in range(self.n_poles):
+            disks = np.where(self._pole_state(pole_id))[0]
+            print(f"pole_{pole_id}: {list(reversed(disks))}")
 
 
 class QLearning(object):
@@ -102,7 +91,6 @@ class QLearning(object):
         self.gamma = gamma
         self.q_table = defaultdict(lambda: [0 for _ in range(self.env.n_actions)])
         self.training_episode_count = 0
-
 
     def play_episode(self, train=True, display=False):
         if train:
