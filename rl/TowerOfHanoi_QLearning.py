@@ -154,12 +154,24 @@ class EpsilonGreedyActor(object):
 
 
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-    
-    env = TowerOfHanoiEnvironment(n_disks=5, max_episode_steps=200)
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-n", "--n_disks", type=int, default=5,
+                    help="num of disks (default: {default}s)")
+    ap.add_argument("-m", "--max_episode_steps", type=int, default=200,
+                    help="maxnum of episode_steps (default: {default}s)")
+    ap.add_argument("-e", "--n_episodes", type=int, default=200,
+                    help="num of episodes (default: {default}s)")
+    ap.add_argument("-p", "--plot", action="store_true")
+    ap.add_argument("-d", "--display", action="store_true")
+    args = ap.parse_args()
+
+    env = TowerOfHanoiEnvironment(
+        n_disks=args.n_disks,
+        max_episode_steps=args.max_episode_steps)
     actor = EpsilonGreedyActor(random_state=0)
     model = QLearning(env, actor)
-    n_episodes = 200
+    n_episodes = args.n_episodes
     episode_steps_traj = []
 
     print('---- Start Training ----')
@@ -172,12 +184,17 @@ if __name__ == '__main__':
                 env.curr_step
             ))
     print('---- Finish Training ----')
-
-    plt.plot(np.arange(1, n_episodes + 1), episode_steps_traj, label='learning')
-    plt.plot([1, n_episodes + 1], [2**5-1, 2**5-1], label='shortest')
-    plt.xlabel('episode')
-    plt.ylabel('episode steps')
-    plt.legend()
-    plt.show()
-
-    
+    if args.display:
+        env.reset()
+        print("----")
+        print("initial state")
+        env.render()
+        model.play_episode(train=False, display=True)
+    if args.plot:
+        import matplotlib.pyplot as plt
+        plt.plot(np.arange(1, n_episodes + 1), episode_steps_traj, label='learning')
+        plt.plot([1, n_episodes + 1], [2**5-1, 2**5-1], label='shortest')
+        plt.xlabel('episode')
+        plt.ylabel('episode steps')
+        plt.legend()
+        plt.show()
