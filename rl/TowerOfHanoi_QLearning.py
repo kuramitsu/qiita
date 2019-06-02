@@ -39,11 +39,14 @@ class TowerOfHanoiEnvironment(object):
 
     def step(self, action):
         self.curr_step += 1
-        self.move_disk(*self.action_map[action])
+        result = self.move_disk(*self.action_map[action])
+        if not result:  # NO_MOVE
+            is_terminal = False
+            reward = -2
+            return self.state, reward, is_terminal
 
         is_terminal = False
         reward = -1
-        
         if not np.any(self._pole_state(0)):
             for pole_id in range(1, self.n_poles):
                 if np.all(self._pole_state(pole_id)):
@@ -68,9 +71,13 @@ class TowerOfHanoiEnvironment(object):
         if top_1 > top_2:
             self._pole_state(pole_1)[top_2] = True
             self._pole_state(pole_2)[top_2] = False
+            return 1    # MOVE TO POLE1
         elif top_1 < top_2:
             self._pole_state(pole_1)[top_1] = False
             self._pole_state(pole_2)[top_1] = True
+            return -1   # MOVE TO POLE2
+        else:
+            return 0    # NO MOVE
 
     def render(self):
         for pole_id in range(self.n_poles):
@@ -146,20 +153,24 @@ class EpsilonGreedyActor(object):
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("-n", "--n_disks", type=int, default=5,
+    ap.add_argument("-d", "--n_disks", type=int, default=5,
                     help="num of disks (default: {default}s)")
-    ap.add_argument("-m", "--max_episode_steps", type=int, default=200,
+    ap.add_argument("-s", "--max_episode_steps", type=int, default=200,
                     help="maxnum of episode_steps (default: {default}s)")
     ap.add_argument("-e", "--n_episodes", type=int, default=200,
                     help="num of episodes (default: {default}s)")
-    ap.add_argument("-p", "--plot", action="store_true")
-    ap.add_argument("-d", "--display", action="store_true")
+    ap.add_argument("-p", "--n_poles", type=int, default=3,
+                    help="num of poles (default: {default}s)")
+    ap.add_argument("-P", "--plot", action="store_true")
+    ap.add_argument("-D", "--display", action="store_true")
     args = ap.parse_args()
 
     n_disks = args.n_disks
+    n_poles = args.n_poles
     env = TowerOfHanoiEnvironment(
         n_disks=n_disks,
-        max_episode_steps=args.max_episode_steps)
+        max_episode_steps=args.max_episode_steps,
+        n_poles=n_poles)
     actor = EpsilonGreedyActor(random_state=0)
     model = QLearning(env, actor)
     n_episodes = args.n_episodes
@@ -184,7 +195,8 @@ if __name__ == '__main__':
     if args.plot:
         import matplotlib.pyplot as plt
         plt.plot(np.arange(1, n_episodes + 1), episode_steps_traj, label='learning')
-        plt.plot([1, n_episodes + 1], [2**n_disks-1, 2**n_disks-1], label='shortest')
+        if n_poles == 3:
+            plt.plot([1, n_episodes + 1], [2**n_disks-1, 2**n_disks-1], label='shortest')
         plt.xlabel('episode')
         plt.ylabel('episode steps')
         plt.legend()
