@@ -95,17 +95,19 @@ class QLearning(object):
     def play_episode(self, train=True, display=False):
         if train:
             self.training_episode_count += 1
-        state = self.env.reset()
+        state = tuple(self.env.reset())
         is_terminal = False
         while not is_terminal:
-            q_values = self.q_table[tuple(state)]
+            q_values = self.q_table[state]
             if train:
                 action = self.actor.act_with_exploration(q_values)
-                next_state, reward, is_terminal = self.env.step(action)
+                _state_array, reward, is_terminal = self.env.step(action)
+                next_state = tuple(_state_array)
                 self.update(state, action, reward, is_terminal, next_state)
             else:
                 action = self.actor.act_without_exploration(q_values)
-                next_state, reward, is_terminal = self.env.step(action)
+                _state_array, reward, is_terminal = self.env.step(action)
+                next_state = tuple(_state_array)
             if display:
                 print('----')
                 print('step:{}'.format(self.env.curr_step))
@@ -113,9 +115,9 @@ class QLearning(object):
             state = next_state
 
     def update(self, state, action, reward, is_terminal, next_state):
-        target = reward + (1 - is_terminal) * max(self.q_table[tuple(next_state)])
-        self.q_table[tuple(state)][action] *= self.alpha
-        self.q_table[tuple(state)][action] += (1 - self.alpha) * target
+        target = reward + (1 - is_terminal) * max(self.q_table[next_state])
+        self.q_table[state][action] *= self.alpha
+        self.q_table[state][action] += (1 - self.alpha) * target
 
 
 class EpsilonGreedyActor(object):
@@ -154,8 +156,9 @@ if __name__ == '__main__':
     ap.add_argument("-d", "--display", action="store_true")
     args = ap.parse_args()
 
+    n_disks = args.n_disks
     env = TowerOfHanoiEnvironment(
-        n_disks=args.n_disks,
+        n_disks=n_disks,
         max_episode_steps=args.max_episode_steps)
     actor = EpsilonGreedyActor(random_state=0)
     model = QLearning(env, actor)
@@ -181,7 +184,7 @@ if __name__ == '__main__':
     if args.plot:
         import matplotlib.pyplot as plt
         plt.plot(np.arange(1, n_episodes + 1), episode_steps_traj, label='learning')
-        plt.plot([1, n_episodes + 1], [2**5-1, 2**5-1], label='shortest')
+        plt.plot([1, n_episodes + 1], [2**n_disks-1, 2**n_disks-1], label='shortest')
         plt.xlabel('episode')
         plt.ylabel('episode steps')
         plt.legend()
